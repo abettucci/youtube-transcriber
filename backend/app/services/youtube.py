@@ -3,7 +3,16 @@ import os
 import tempfile
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
 import yt_dlp
-import whisper
+from faster_whisper import WhisperModel
+
+_model: WhisperModel | None = None
+
+
+def _get_model() -> WhisperModel:
+    global _model
+    if _model is None:
+        _model = WhisperModel("base", device="cpu", compute_type="int8")
+    return _model
 
 
 def extract_video_id(url: str) -> str:
@@ -31,9 +40,9 @@ def get_transcript(video_id: str, lang: str = "es") -> dict:
     # 2. Fallback: yt-dlp + Whisper
     with tempfile.TemporaryDirectory() as tmpdir:
         audio_path = _download_audio(video_id, tmpdir)
-        model = whisper.load_model("base")
-        result = model.transcribe(audio_path, language=lang if lang != "es" else None)
-        text = result["text"].strip()
+        model = _get_model()
+        segments, _ = model.transcribe(audio_path, language=lang)
+        text = " ".join(segment.text.strip() for segment in segments)
 
     return {"text": text, "method": "whisper", "word_count": len(text.split())}
 
